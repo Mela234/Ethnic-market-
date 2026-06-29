@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Dera Market",
+    "slug": "dera-market",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.deramarket.app"
+    },
+    "android": {
+      "package": "com.deramarket.app"
+    }
+  }
+}
