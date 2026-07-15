@@ -11,6 +11,9 @@
     },
     "android": {
       "package": "com.deramarket.app"
-    }
+    },
+    "plugins": [
+      "expo-secure-store"
+    ]
   }
 }
