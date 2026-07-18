@@ -1,17 +1,22 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import * as api from '../api/client';
-import { saveToken, loadToken, clearToken } from '../api/tokenStore';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+} from "react";
+import * as api from "../api/client";
+import { saveToken, loadToken, clearToken } from "../api/tokenStore";
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  // `booting` covers the one-time session restore on launch. Showing the auth
-  // screen during it would flash it at users who are already signed in.
+  // One-time session restore on launch; screens wait on this instead of
+  // flashing the auth screen at an already-signed-in user.
   const [booting, setBooting] = useState(true);
-  // `guest` = tapped "Browse as guest". Lets them past the landing screen
-  // without an account. Purely client-side — the server has no guest concept,
-  // and checkout still demands a real token.
+  // Client-side only: tapped "Browse as guest". The server has no guest
+  // concept, and checkout still requires a real token.
   const [guest, setGuest] = useState(false);
 
   useEffect(() => {
@@ -23,12 +28,10 @@ export function AuthProvider({ children }) {
         if (!token) return;
 
         api.setToken(token);
-        // A stored token proves nothing — it may be expired (they last 7 days)
-        // or the account may be gone. /auth/me is the cheapest way to find out.
+        // The token may be expired or the account gone; /auth/me confirms it.
         const me = await api.fetchMe();
         if (!cancelled) setUser(me);
       } catch {
-        // Bad or expired token: drop it so we don't retry with it forever.
         api.setToken(null);
         await clearToken();
       } finally {
@@ -36,11 +39,12 @@ export function AuthProvider({ children }) {
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Both register and login return only { access_token }, so fetch the user
-  // afterwards to populate the profile.
+  // Persists the token and loads the user. Shared by every sign-in path.
   const establish = useCallback(async (accessToken) => {
     api.setToken(accessToken);
     await saveToken(accessToken);
@@ -49,15 +53,34 @@ export function AuthProvider({ children }) {
     return me;
   }, []);
 
-  const signIn = useCallback(async ({ phone, password }) => {
-    const { access_token } = await api.login({ phone, password });
-    return establish(access_token);
-  }, [establish]);
+  const signIn = useCallback(
+    async ({ phone, password }) => {
+      const { access_token } = await api.login({ phone, password });
+      return establish(access_token);
+    },
+    [establish],
+  );
 
-  const signUp = useCallback(async ({ phone, password, name, email }) => {
-    const { access_token } = await api.register({ phone, password, name, email });
-    return establish(access_token);
-  }, [establish]);
+  const signUp = useCallback(
+    async ({ phone, password, name, email }) => {
+      const { access_token } = await api.register({
+        phone,
+        password,
+        name,
+        email,
+      });
+      return establish(access_token);
+    },
+    [establish],
+  );
+
+  // Google already has our JWT from POST /auth/google, so it skips credentials.
+  const signInWithToken = useCallback(
+    async (accessToken) => {
+      return establish(accessToken);
+    },
+    [establish],
+  );
 
   const continueAsGuest = useCallback(() => setGuest(true), []);
 
@@ -65,8 +88,6 @@ export function AuthProvider({ children }) {
     api.setToken(null);
     await clearToken();
     setUser(null);
-    // Drop guest too, so signing out lands on the landing screen rather than
-    // silently downgrading them to a browsing guest.
     setGuest(false);
   }, []);
 
@@ -79,6 +100,7 @@ export function AuthProvider({ children }) {
         signedIn: !!user,
         signIn,
         signUp,
+        signInWithToken,
         signOut,
         continueAsGuest,
       }}

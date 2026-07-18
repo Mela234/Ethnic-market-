@@ -1,50 +1,65 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView,
-  ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
-} from 'react-native';
-import Feather from '@expo/vector-icons/Feather';
-import { COLORS } from '../theme/colors';
-import { useAuth } from '../context/AuthContext';
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  SafeAreaView,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from "react-native";
+import Feather from "@expo/vector-icons/Feather";
+import { COLORS } from "../theme/colors";
+import { useAuth } from "../context/AuthContext";
+import { useGoogleSignIn } from "../api/googleAuth";
 
-/**
- * Serves two jobs:
- *
- *  1. Landing screen  — pass `onGuest` to show the "Browse as guest" escape
- *                       hatch. This is the DoorDash shape: looks like a wall,
- *                       isn't one.
- *  2. Checkout gate   — pass `onClose` + `reason` to render it in a Modal when
- *                       a guest tries to place an order.
- */
+// Landing screen when passed `onGuest`; checkout gate when passed `onClose`.
 export default function AuthScreen({ onGuest, onClose, reason, onSuccess }) {
-  // Defaults to sign-up: tokens last 7 days, so returning users rarely land
-  // here. Most people who do see it are new.
-  const [mode, setMode] = useState('signup'); // 'signup' | 'signin'
-  const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
+  const [mode, setMode] = useState("signup"); // 'signup' | 'signin'
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
-  const { signIn, signUp } = useAuth();
-  const isSignUp = mode === 'signup';
+  const { signIn, signUp, signInWithToken } = useAuth();
+  const isSignUp = mode === "signup";
+
+  const { promptGoogle, googleReady } = useGoogleSignIn({
+    onToken: async (accessToken) => {
+      try {
+        await signInWithToken(accessToken);
+        onSuccess?.();
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setBusy(false);
+      }
+    },
+    onError: (msg) => {
+      setError(msg);
+      setBusy(false);
+    },
+  });
 
   const switchMode = () => {
-    setMode(isSignUp ? 'signin' : 'signup');
+    setMode(isSignUp ? "signin" : "signup");
     setError(null);
   };
 
   const submit = async () => {
     setError(null);
 
-    // Mirror the backend's rules so obvious mistakes don't cost a round trip.
-    // The server validates independently regardless.
+    // Mirror the backend rules to skip an obvious round trip.
     if (phone.trim().length < 6) {
-      setError('Enter a valid phone number');
+      setError("Enter a valid phone number");
       return;
     }
     if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError("Password must be at least 6 characters");
       return;
     }
 
@@ -58,11 +73,10 @@ export default function AuthScreen({ onGuest, onClose, reason, onSuccess }) {
       }
       onSuccess?.();
     } catch (e) {
-      // 409 = phone already taken. Nudge them to sign in with it prefilled
-      // instead of leaving them staring at an error they can't act on.
+      // 409 = phone taken. Flip to sign-in rather than dead-ending them.
       if (e.status === 409) {
-        setMode('signin');
-        setError('That number already has an account. Sign in instead.');
+        setMode("signin");
+        setError("That number already has an account. Sign in instead.");
       } else {
         setError(e.message);
       }
@@ -71,14 +85,24 @@ export default function AuthScreen({ onGuest, onClose, reason, onSuccess }) {
     }
   };
 
+  const startGoogle = () => {
+    setError(null);
+    setBusy(true);
+    promptGoogle();
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {onClose && (
-          <TouchableOpacity style={styles.closeBtn} onPress={onClose} disabled={busy}>
+          <TouchableOpacity
+            style={styles.closeBtn}
+            onPress={onClose}
+            disabled={busy}
+          >
             <Feather name="x" size={22} color={COLORS.white} />
           </TouchableOpacity>
         )}
@@ -92,13 +116,14 @@ export default function AuthScreen({ onGuest, onClose, reason, onSuccess }) {
             <Text style={styles.logo}>🧺</Text>
             <Text style={styles.brand}>BAZAAR</Text>
             <Text style={styles.tagline}>
-              Your world of <Text style={styles.taglineAccent}>flavors</Text>, delivered.
+              Your world of <Text style={styles.taglineAccent}>flavors</Text>,
+              delivered.
             </Text>
           </View>
 
           <View style={styles.form}>
             <Text style={styles.formTitle}>
-              {reason || (isSignUp ? 'Create your account' : 'Welcome back')}
+              {reason || (isSignUp ? "Create your account" : "Welcome back")}
             </Text>
 
             {isSignUp && (
@@ -164,28 +189,42 @@ export default function AuthScreen({ onGuest, onClose, reason, onSuccess }) {
                 <ActivityIndicator color={COLORS.black} />
               ) : (
                 <Text style={styles.submitText}>
-                  {isSignUp ? 'Create account' : 'Sign in'}
+                  {isSignUp ? "Create account" : "Sign in"}
                 </Text>
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={switchMode} disabled={busy} style={styles.switchBtn}>
+            <TouchableOpacity
+              onPress={switchMode}
+              disabled={busy}
+              style={styles.switchBtn}
+            >
               <Text style={styles.switchText}>
-                {isSignUp ? 'Already have an account? ' : 'New to Bazaar? '}
+                {isSignUp ? "Already have an account? " : "New to Bazaar? "}
                 <Text style={styles.switchAccent}>
-                  {isSignUp ? 'Sign in' : 'Create one'}
+                  {isSignUp ? "Sign in" : "Create one"}
                 </Text>
               </Text>
             </TouchableOpacity>
 
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <TouchableOpacity
+              style={styles.googleBtn}
+              onPress={startGoogle}
+              disabled={busy || !googleReady}
+              activeOpacity={0.85}
+            >
+              <Feather name="chrome" size={18} color={COLORS.black} />
+              <Text style={styles.googleText}>Continue with Google</Text>
+            </TouchableOpacity>
+
             {onGuest && (
               <>
-                <View style={styles.dividerRow}>
-                  <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>OR</Text>
-                  <View style={styles.dividerLine} />
-                </View>
-
                 <TouchableOpacity
                   style={styles.guestBtn}
                   onPress={onGuest}
@@ -209,38 +248,54 @@ export default function AuthScreen({ onGuest, onClose, reason, onSuccess }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.black },
   flex: { flex: 1 },
-  scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+  scroll: { flexGrow: 1, justifyContent: "center", padding: 24 },
 
   closeBtn: {
-    position: 'absolute', top: 10, right: 16, zIndex: 10,
-    width: 38, height: 38, borderRadius: 19,
+    position: "absolute",
+    top: 10,
+    right: 16,
+    zIndex: 10,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: COLORS.charcoal,
-    alignItems: 'center', justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
 
-  header: { alignItems: 'center', marginBottom: 30 },
+  header: { alignItems: "center", marginBottom: 30 },
   logo: { fontSize: 46 },
   brand: {
     color: COLORS.mustard,
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: 4,
     marginTop: 8,
   },
   tagline: {
     color: COLORS.white,
     fontSize: 21,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: -0.4,
     marginTop: 10,
-    textAlign: 'center',
+    textAlign: "center",
   },
   taglineAccent: { color: COLORS.mustard },
 
   form: { gap: 14 },
-  formTitle: { color: COLORS.white, fontSize: 16, fontWeight: '700', marginBottom: 2 },
+  formTitle: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
   field: { gap: 6 },
-  label: { fontSize: 10, fontWeight: '700', letterSpacing: 1, color: COLORS.gray },
+  label: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 1,
+    color: COLORS.gray,
+  },
   input: {
     backgroundColor: COLORS.charcoal,
     borderRadius: 12,
@@ -253,39 +308,70 @@ const styles = StyleSheet.create({
   },
 
   errorBox: {
-    backgroundColor: 'rgba(217, 48, 37, 0.15)',
+    backgroundColor: "rgba(217, 48, 37, 0.15)",
     borderRadius: 10,
     padding: 11,
     borderLeftWidth: 3,
-    borderLeftColor: '#D93025',
+    borderLeftColor: "#D93025",
   },
-  errorText: { color: '#FF8A80', fontSize: 13, fontWeight: '600' },
+  errorText: { color: "#FF8A80", fontSize: 13, fontWeight: "600" },
 
   submitBtn: {
     backgroundColor: COLORS.mustard,
     borderRadius: 12,
     paddingVertical: 15,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 4,
   },
   submitBtnBusy: { opacity: 0.7 },
-  submitText: { color: COLORS.black, fontWeight: '800', fontSize: 15, letterSpacing: 0.3 },
+  submitText: {
+    color: COLORS.black,
+    fontWeight: "800",
+    fontSize: 15,
+    letterSpacing: 0.3,
+  },
 
-  switchBtn: { alignItems: 'center', paddingVertical: 6 },
+  switchBtn: { alignItems: "center", paddingVertical: 6 },
   switchText: { color: COLORS.gray, fontSize: 13 },
-  switchAccent: { color: COLORS.mustard, fontWeight: '700' },
+  switchAccent: { color: COLORS.mustard, fontWeight: "700" },
 
-  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 4,
+  },
   dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.charcoalLight },
-  dividerText: { color: COLORS.gray, fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  dividerText: {
+    color: COLORS.gray,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1,
+  },
+
+  googleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    paddingVertical: 14,
+  },
+  googleText: { color: COLORS.black, fontWeight: "700", fontSize: 14 },
 
   guestBtn: {
     borderRadius: 12,
     paddingVertical: 14,
-    alignItems: 'center',
+    alignItems: "center",
     borderWidth: 1.5,
     borderColor: COLORS.charcoalLight,
   },
-  guestText: { color: COLORS.white, fontWeight: '700', fontSize: 14 },
-  guestHint: { color: COLORS.gray, fontSize: 11, textAlign: 'center', marginTop: -4 },
+  guestText: { color: COLORS.white, fontWeight: "700", fontSize: 14 },
+  guestHint: {
+    color: COLORS.gray,
+    fontSize: 11,
+    textAlign: "center",
+    marginTop: -4,
+  },
 });
