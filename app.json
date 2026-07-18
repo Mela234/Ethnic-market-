@@ -11,6 +11,15 @@
     },
     "android": {
       "package": "com.deramarket.app"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-web-browser"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "51b6fc73-4e78-4fba-b753-b3a6a98bc2ab"
+      }
     }
   }
 }
